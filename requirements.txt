@@ -8,3 +8,4 @@ seaborn>=0.12
 torch>=2.0
 scipy>=1.10
 scvelo>=0.2.5
+captum>=0.6
