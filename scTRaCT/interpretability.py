@@ -74,6 +74,15 @@ def get_gene_attributions(model, adata, label_encoder, target_class,
 
 
 # ---------------------------------------------------------------------------
+# Helper: sanitize a cell type name for use in file/folder names
+# ---------------------------------------------------------------------------
+def _safe_filename(name):
+    """Replace characters that are invalid in file names with underscores."""
+    import re
+    return re.sub(r'[/\\:*?"<>|]', '_', name)
+
+
+# ---------------------------------------------------------------------------
 # Helper: convert a layer to a dense numpy float32 array
 # ---------------------------------------------------------------------------
 def _to_dense(layer):
@@ -360,7 +369,7 @@ def explain_all_celltypes(model, adata, label_encoder,
             score_col = f"{m}_Score"
             if score_col not in df.columns:
                 continue
-            bar_path = os.path.join(save_dir, f"{ct}_attributions_{m}.png") if save_dir else None
+            bar_path = os.path.join(save_dir, f"{_safe_filename(ct)}_attributions_{m}.png") if save_dir else None
             fig = plot_gene_attributions(df, ct, method=m, top_n=top_n,
                                          save_path=bar_path)
             if plot:
@@ -412,7 +421,7 @@ def explain_all_celltypes(model, adata, label_encoder,
     # ------------------------------------------------------------------ CSVs
     if save_dir:
         for ct, df in results.items():
-            csv_path = os.path.join(save_dir, f"{ct}_attributions.csv")
+            csv_path = os.path.join(save_dir, f"{_safe_filename(ct)}_attributions.csv")
             df.to_csv(csv_path, index=False)
             print(f"  Saved CSV: {csv_path}")
 
