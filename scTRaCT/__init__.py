@@ -9,4 +9,5 @@ from .interpretability import (
     explain_celltype,
     explain_all_celltypes,
     plot_gene_attributions,
+    plot_score_distribution,
 )

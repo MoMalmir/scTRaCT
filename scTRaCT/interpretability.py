@@ -141,7 +141,133 @@ def plot_gene_attributions(results_df, cell_type, method="IG", top_n=20,
 
 
 # ---------------------------------------------------------------------------
-# 2. explain_celltype — attribution for a single predicted cell type
+# 2. plot_score_distribution — ranked-score curve + histogram to validate top_n
+# ---------------------------------------------------------------------------
+def plot_score_distribution(results_df, cell_type, method="IG", top_n=20,
+                            show_histogram=True, log_scale=False,
+                            label_top_n=5, figsize=None, save_path=None):
+    """
+    Visualise the distribution of attribution scores across all genes to help
+    justify (or question) a top_n cutoff.
+
+    Two panels are shown side by side when ``show_histogram=True``:
+
+    * **Left — ranked-score curve (elbow plot):** every gene ranked from highest
+      to lowest score.  A vertical dashed line marks the ``top_n`` cutoff.
+      Use this to see whether scores drop sharply (good cutoff) or gradually
+      (cutoff is arbitrary).
+    * **Right — histogram:** shows how scores are distributed across all genes.
+      Most genes should cluster near zero with a long right tail; that right
+      tail is what we capture with top_n.
+
+    Parameters
+    ----------
+    results_df : pd.DataFrame
+        DataFrame with columns 'gene' and at least one of 'IG_Score' /
+        'SHAP_Score'.  Produced by ``explain_celltype()`` or
+        ``get_gene_attributions()``.
+    cell_type : str
+        Cell type label — used only in the title.
+    method : {'IG', 'SHAP'}
+        Which score column to plot.
+    top_n : int
+        Where to draw the cutoff line on the ranked-score curve.
+    show_histogram : bool
+        If True, show a histogram panel alongside the elbow plot.
+        Set to False to get only the ranked-score curve.
+    log_scale : bool
+        If True, use a log10 y-axis on the ranked-score curve.  Useful when
+        scores span several orders of magnitude.
+    label_top_n : int
+        How many of the top genes to label by name on the elbow plot.
+        Set to 0 to suppress gene labels.
+    figsize : tuple or None
+        Figure size.  Defaults to (12, 4) with histogram, (7, 4) without.
+    save_path : str or None
+        If given, save the figure to this path (PNG).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    score_col = "IG_Score" if method == "IG" else "SHAP_Score"
+    if score_col not in results_df.columns:
+        raise ValueError(f"Column '{score_col}' not found in results_df. "
+                         f"Available: {list(results_df.columns)}")
+
+    # sort descending by score so rank = position in array
+    sorted_df = results_df.sort_values(by=score_col, ascending=False).reset_index(drop=True)
+    scores = sorted_df[score_col].values
+    ranks  = np.arange(1, len(scores) + 1)
+
+    n_panels = 2 if show_histogram else 1
+    if figsize is None:
+        figsize = (12, 4) if show_histogram else (7, 4)
+
+    fig, axes = plt.subplots(1, n_panels, figsize=figsize)
+    if n_panels == 1:
+        axes = [axes]   # keep indexing consistent
+
+    # ---- Panel 1: ranked-score elbow curve --------------------------------
+    ax = axes[0]
+    ax.plot(ranks, scores, color="steelblue", linewidth=1.5)
+    ax.axvline(x=top_n, color="tomato", linestyle="--", linewidth=1.2,
+               label=f"top_n = {top_n}")
+
+    # shade the top_n region
+    ax.fill_between(ranks[:top_n], scores[:top_n], alpha=0.15, color="tomato")
+
+    # label the top genes by name
+    if label_top_n > 0:
+        for i in range(min(label_top_n, len(sorted_df))):
+            ax.annotate(sorted_df.loc[i, "gene"],
+                        xy=(ranks[i], scores[i]),
+                        xytext=(ranks[i] + max(1, len(ranks) * 0.01), scores[i]),
+                        fontsize=7, color="dimgray",
+                        arrowprops=dict(arrowstyle="-", color="lightgray", lw=0.8))
+
+    if log_scale:
+        ax.set_yscale("log")
+        ax.set_ylabel(f"Mean |{method} Score| (log scale)")
+    else:
+        ax.set_ylabel(f"Mean |{method} Score|")
+
+    ax.set_xlabel("Gene rank (highest → lowest)")
+    ax.set_title(f"Ranked-score curve — {cell_type} ({method})")
+    ax.legend(fontsize=8)
+    ax.spines[["top", "right"]].set_visible(False)
+
+    # score at the cutoff — helpful annotation
+    if top_n <= len(scores):
+        cutoff_score = scores[top_n - 1]
+        ax.text(top_n + max(1, len(ranks) * 0.01), cutoff_score,
+                f" score={cutoff_score:.4f}", fontsize=7, color="tomato",
+                va="center")
+
+    # ---- Panel 2: histogram -----------------------------------------------
+    if show_histogram:
+        ax2 = axes[1]
+        ax2.hist(scores, bins=50, color="steelblue", edgecolor="white", linewidth=0.4)
+        ax2.axvline(x=scores[top_n - 1] if top_n <= len(scores) else 0,
+                    color="tomato", linestyle="--", linewidth=1.2,
+                    label=f"top_{top_n} threshold")
+        ax2.set_xlabel(f"Mean |{method} Score|")
+        ax2.set_ylabel("Number of genes")
+        ax2.set_title(f"Score distribution — {cell_type} ({method})")
+        ax2.legend(fontsize=8)
+        ax2.spines[["top", "right"]].set_visible(False)
+
+    plt.tight_layout()
+
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"  Saved distribution plot: {save_path}")
+
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# 3. explain_celltype — attribution for a single predicted cell type
 # ---------------------------------------------------------------------------
 def explain_celltype(model, adata, label_encoder, cell_type,
                      method="both",
