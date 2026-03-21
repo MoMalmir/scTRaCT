@@ -5,3 +5,5 @@ __pycache__/
 *.egg-info/
 plans/
 CLAUDE.md
+generate_presentation.py
+scTRaCT_XAI_Presentation.pptx
